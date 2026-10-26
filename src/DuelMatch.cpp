@@ -304,6 +304,11 @@ const std::string& DuelMatch::getTimeString() const
 	return mLogic->getClock().getTimeString();
 }
 
+int DuelMatch::getMatchTimeMs() const
+{
+	return mLogic->getClock().getTimeMs();
+}
+
 void DuelMatch::setMatchTimeMs(int milliseconds)
 {
 	mLogic->getClock().setTime( Clock::milliseconds(milliseconds) );

@@ -57,12 +57,18 @@ class Clock
 		/// gets the time in seconds as an integer
 		seconds getTime() const;
 
+		/// gets the time in milliseconds as an integer
+		int getTimeMs() const;
+
 		/// set the time to a specified value
 		/// \param newTime: new time in milliseconds
 		void setTime(milliseconds newTime);
 
 		/// returns the time as a string
 		const std::string& getTimeString() const;
+
+		/// formats milliseconds as MM:SS.ms (centiseconds)
+		static std::string formatTimeMs(int time_ms);
 
 	private:
 		/// is the clock currently running?
@@ -77,7 +83,7 @@ class Clock
 		clock_t::time_point mLastTime;
 
 		/// Currently formatted time text
-		std::string mCurrentTimeString{"00:00"};
+		std::string mCurrentTimeString{"00:00.00"};
 
 		/// Sets the new game time, and updates `mCurrentTimeString` if appropriate.
 		void updateGameTime(duration_t new_time);

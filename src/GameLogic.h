@@ -90,6 +90,7 @@ class IGameLogic: public ObjectCounter<IGameLogic>
 
 		/// gets the associated clock
 		Clock& getClock();
+		const Clock& getClock() const;
 
 		/// transform input
 		PlayerInput transformInput(PlayerInput ip, PlayerSide player);

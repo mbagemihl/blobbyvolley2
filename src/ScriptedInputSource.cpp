@@ -183,7 +183,7 @@ PlayerInputAbs ScriptedInputSource::getNextInput()
 	{
 		mOldOppTouches = opp_touches;
 		// the number of opponent touches get reset to zero if the bot touches the ball -- ignore these cases
-		if(opp_touches != 0)
+		if(opp_touches != 0 && mDifficulty > 0)
 		{
 			int base_difficulty = std::max( 0, 2 * mDifficulty - 30 );
 			int max_difficulty = std::min(75, base_difficulty + 2 * getCurrentDifficulty());
@@ -224,7 +224,7 @@ PlayerInputAbs ScriptedInputSource::getNextInput()
 		// don't apply an error after every collision -- results in very jittery bot.
 		// instead, only do this in a fraction of the cases, up to 25% for very easy.
 		std::uniform_int_distribution<int> dist{0, 100};
-		if( dist( mRandom ) < mDifficulty ) {
+		if( mDifficulty > 0 && dist( mRandom ) < mDifficulty ) {
 			// generate a random amount, and random duration, for the error effect.
 			float amount = std::min(25, getCurrentDifficulty()) / 50.f + std::max(0, mDifficulty - 5) / 25.f;
 			int err_time = 25 + mDifficulty + std::min(75, getCurrentDifficulty());

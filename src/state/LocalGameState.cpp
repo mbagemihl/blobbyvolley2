@@ -30,12 +30,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "SoundManager.h"
 #include "SpeedController.h"
 #include "IUserConfigReader.h"
+#include "UserConfig.h"
+#include "Clock.h"
 
 #include "LocalInputSource.h"
 #include "ScriptedInputSource.h"
 
+#include <SDL.h>
+
 /* implementation */
-LocalGameState::~LocalGameState() = default;
+LocalGameState::~LocalGameState()
+{
+	if (SpeedController::getMainInstance())
+	{
+		SpeedController::getMainInstance()->setGameSpeed(mBaseGameFPS);
+	}
+}
 
 LocalGameState::LocalGameState()
 	: mWinner(false), mRecorder(new ReplayRecorder())
@@ -47,6 +57,12 @@ std::shared_ptr<InputSource> LocalGameState::createInputSource( IUserConfigReade
 	std::string prefix = side == LEFT_PLAYER ? "left" : "right";
 	try
 	{
+		if (side == RIGHT_PLAYER)
+		{
+			// Right side is always the unbeatable bot in Time-Survival mode (difficulty 0 = 0 artificial errors)
+			return std::make_shared<ScriptedInputSource>("scripts/unbeatable_ai", RIGHT_PLAYER, 0, match);
+		}
+
 		// these operations may throw, i.e., when the script is not found (should not happen)
 		//  or has errors
 		if (config.getBool(prefix + "_player_human"))
@@ -71,12 +87,19 @@ void LocalGameState::init()
 	std::shared_ptr<IUserConfigReader> config = IUserConfigReader::createUserConfigReader("config.xml");
 	PlayerIdentity leftPlayer = config->loadPlayerIdentity(LEFT_PLAYER, false);
 	PlayerIdentity rightPlayer = config->loadPlayerIdentity(RIGHT_PLAYER, false);
+	rightPlayer.setName("unbeatable_ai.lua");
+
+	mBaseGameFPS = (float)config->getInteger("gamefps", 75);
+	mLastDifficultyLevel = 0;
+	mHighscoreMs = config->getInteger("survival_highscore_ms", 0);
+	mFinalTimeMs = 0;
+	mIsNewHighscore = false;
 
 	// create default replay name
 	setDefaultReplayName(leftPlayer.getName(), rightPlayer.getName());
 
 	// set speed
-	SpeedController::getMainInstance()->setGameSpeed( (float)config->getInteger("gamefps") );
+	SpeedController::getMainInstance()->setGameSpeed( mBaseGameFPS );
 
 	playSound(SoundManager::WHISTLE, ROUND_START_SOUND_VOLUME);
 
@@ -85,6 +108,7 @@ void LocalGameState::init()
 	std::shared_ptr<InputSource> rightInput = createInputSource(*config, RIGHT_PLAYER, mMatch.get());
 	mMatch->setPlayers(leftPlayer, rightPlayer);
 	mMatch->setInputSources(leftInput, rightInput);
+	mMatch->setServingPlayer(LEFT_PLAYER);
 
 	mRecorder->setPlayerNames(leftPlayer.getName(), rightPlayer.getName());
 	mRecorder->setPlayerColors( leftPlayer.getStaticColor(), rightPlayer.getStaticColor() );
@@ -121,19 +145,38 @@ void LocalGameState::step_impl()
 	}
 	else if (mWinner)
 	{
-		displayWinningPlayerScreen( mMatch->winningPlayer() );
-		if (imgui.doButton(GEN_ID, Vector2(310, 340), TextManager::LBL_OK))
-		{
-			switchState(new MainMenuState());
-		}
-		if (imgui.doButton(GEN_ID, Vector2(420, 340), TextManager::GAME_TRY_AGAIN))
-		{
-			switchState(new LocalGameState());
-		}
-		if (imgui.doButton(GEN_ID, Vector2(500, 390), TextManager::RP_SAVE, TF_ALIGN_CENTER))
+		// Compact 'Game Over - Retry' overlay
+		imgui.doOverlay(GEN_ID, Vector2(150, 150), Vector2(650, 420));
+		imgui.doText(GEN_ID, Vector2(400, 175), "GAME OVER", TF_ALIGN_CENTER);
+		imgui.doText(GEN_ID, Vector2(400, 220), "TIME: " + Clock::formatTimeMs(mFinalTimeMs), TF_ALIGN_CENTER);
+		imgui.doText(GEN_ID, Vector2(400, 260),
+			(mIsNewHighscore ? "NEW BEST: " : "BEST: ") + Clock::formatTimeMs(mHighscoreMs),
+			TF_ALIGN_CENTER | (mIsNewHighscore ? TF_HIGHLIGHT : TF_NORMAL));
+
+		bool retryTriggered = imgui.doButton(GEN_ID, Vector2(290, 325), TextManager::GAME_TRY_AGAIN, TF_ALIGN_CENTER);
+		bool menuTriggered = imgui.doButton(GEN_ID, Vector2(510, 325), TextManager::LBL_OK, TF_ALIGN_CENTER);
+
+		if (imgui.doButton(GEN_ID, Vector2(400, 375), TextManager::RP_SAVE, TF_ALIGN_CENTER | TF_SMALL_FONT))
 		{
 			mSaveReplay = true;
 			imgui.resetSelection();
+		}
+
+		imgui.doCursor();
+
+		// Space or Enter immediately restarts after a short grace period
+		if (SDL_GetTicks() - mGameOverTicks > 250 && getInputMgr().select())
+		{
+			retryTriggered = true;
+		}
+
+		if (retryTriggered)
+		{
+			switchState(new LocalGameState());
+		}
+		else if (menuTriggered || is_exiting())
+		{
+			switchState(new MainMenuState());
 		}
 	}
 	else if (is_exiting())
@@ -157,9 +200,39 @@ void LocalGameState::step_impl()
 		mRecorder->record(mMatch->getState());
 		mMatch->step();
 
+		// Dynamic difficulty every 10 seconds of real-time survival (+10% game speed per 10s)
+		int currentDifficultyLevel = mMatch->getMatchTimeMs() / 10000;
+		if (currentDifficultyLevel != mLastDifficultyLevel)
+		{
+			mLastDifficultyLevel = currentDifficultyLevel;
+			float scaledFPS = mBaseGameFPS * (1.0f + 0.10f * static_cast<float>(currentDifficultyLevel));
+			SpeedController::getMainInstance()->setGameSpeed(scaledFPS);
+		}
+
 		if (mMatch->winningPlayer() != NO_PLAYER)
 		{
 			mWinner = true;
+			mGameOverTicks = SDL_GetTicks();
+			mFinalTimeMs = mMatch->getMatchTimeMs();
+			SpeedController::getMainInstance()->setGameSpeed(mBaseGameFPS);
+
+			if (mFinalTimeMs > mHighscoreMs)
+			{
+				mHighscoreMs = mFinalTimeMs;
+				mIsNewHighscore = true;
+				try
+				{
+					UserConfig userConfig;
+					userConfig.loadFile("config.xml");
+					userConfig.setInteger("survival_highscore_ms", mHighscoreMs);
+					userConfig.saveFile("config.xml");
+				}
+				catch (std::exception& e)
+				{
+					std::cerr << "Warning: Could not save survival highscore: " << e.what() << std::endl;
+				}
+			}
+
 			mRecorder->record(mMatch->getState());
 			mRecorder->finalize( mMatch->getScore(LEFT_PLAYER), mMatch->getScore(RIGHT_PLAYER) );
 		}
@@ -168,6 +241,7 @@ void LocalGameState::step_impl()
 	}
 
 	presentGameUI();
+	imgui.doText(GEN_ID, Vector2(800 - 24, 24), "BEST " + Clock::formatTimeMs(mHighscoreMs), TF_ALIGN_RIGHT | TF_SMALL_FONT);
 }
 
 const char* LocalGameState::getStateName() const

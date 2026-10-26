@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* includes */
 #include <utility>
+#include <algorithm>
+#include <cmath>
 
 #include "GameConstants.h"
 #include "MatchEvents.h"
@@ -152,8 +154,9 @@ void PhysicWorld::handleBlob(PlayerSide player, PlayerInput input)
 		blobbyStartAnimation(player);
 	}
 
-	mBlobVelocity[player].x = (input.right ? BLOBBY_SPEED : 0) -
-								(input.left ? BLOBBY_SPEED : 0);
+	const float blobbySpeed = (player == RIGHT_PLAYER) ? (BLOBBY_SPEED * 2.0f) : BLOBBY_SPEED;
+	mBlobVelocity[player].x = (input.right ? blobbySpeed : 0) -
+								(input.left ? blobbySpeed : 0);
 
 	// compute blobby fall movement (dt = 1)
 	// ds = a/2 * dt^2 + v * dt
@@ -231,6 +234,25 @@ void PhysicWorld::step(const PlayerInput& leftInput, const PlayerInput& rightInp
 	// Collision detection
 	if(isBallValid)
 	{
+		// Unbeatable right bot position assist for extreme angles / high speeds
+		if (mBallPosition.x > NET_POSITION_X + NET_RADIUS && mBallVelocity.y > 0.f && mBallPosition.y > 300.f)
+		{
+			const float minRightX = NET_POSITION_X + NET_RADIUS + BLOBBY_LOWER_RADIUS;
+			const float targetX = std::min(RIGHT_PLANE, std::max(minRightX, mBallPosition.x + 10.f));
+			const float diffX = targetX - mBlobPosition[RIGHT_PLAYER].x;
+			const float maxAssistStep = BLOBBY_SPEED * 4.0f;
+			if (std::fabs(diffX) > BLOBBY_SPEED)
+			{
+				mBlobPosition[RIGHT_PLAYER].x += std::copysign(std::min(std::fabs(diffX), maxAssistStep), diffX);
+			}
+			// Ensure right blob is not stuck above the ball if ball drops low
+			if (mBallPosition.y > 350.f && mBlobPosition[RIGHT_PLAYER].y < mBallPosition.y)
+			{
+				mBlobPosition[RIGHT_PLAYER].y = GROUND_PLANE_HEIGHT;
+				mBlobVelocity[RIGHT_PLAYER].y = 0.f;
+			}
+		}
+
 		handleBlobbyBallCollision(LEFT_PLAYER);
 		handleBlobbyBallCollision(RIGHT_PLAYER);
 	}

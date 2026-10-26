@@ -85,17 +85,18 @@ void GameState::presentGameUI()
 
 	auto& imgui = getIMGUI();
 
-	// Scores
-	char textBuffer[64];
-	snprintf(textBuffer, 8, mMatch->getServingPlayer() == LEFT_PLAYER ? "%02d!" : "%02d ", mMatch->getScore(LEFT_PLAYER));
-	imgui.doText(GEN_ID, Vector2(24, 24), textBuffer);
-	snprintf(textBuffer, 8, mMatch->getServingPlayer() == RIGHT_PLAYER ? "%02d!" : "%02d ", mMatch->getScore(RIGHT_PLAYER));
-	imgui.doText(GEN_ID, Vector2(800-24, 24), textBuffer, TF_ALIGN_RIGHT);
+	// Speed multiplier indicator (increases every 10s of real-time survival)
+	int difficultyLevel = mMatch->getMatchTimeMs() / 10000;
+	char speedBuffer[64];
+	snprintf(speedBuffer, sizeof(speedBuffer), "SPEED %d.%dX", 1 + (difficultyLevel / 10), difficultyLevel % 10);
+	imgui.doText(GEN_ID, Vector2(24, 24), speedBuffer, TF_SMALL_FONT);
 
-	// blob name / time textfields
+	// Prominent real-time survival timer (MM:SS.ms) at top center
+	imgui.doText(GEN_ID, Vector2(400, 24), mMatch->getTimeString(), TF_ALIGN_CENTER);
+
+	// blob name textfields
 	imgui.doText(GEN_ID, Vector2(12, 550), mMatch->getPlayer(LEFT_PLAYER).getName());
 	imgui.doText(GEN_ID, Vector2(788, 550), mMatch->getPlayer(RIGHT_PLAYER).getName(), TF_ALIGN_RIGHT);
-	imgui.doText(GEN_ID, Vector2(400, 24), mMatch->getTimeString(), TF_ALIGN_CENTER);
 
 #if !BLOBBY_FEATURE_HAS_BACKBUTTON
 	if (imgui.doImageButton(GEN_ID, Vector2(400, 95), Vector2(100, 100), "gfx/flag.bmp") && !mMatch->isPaused())

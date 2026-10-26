@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* includes */
 #include <algorithm>
+#include <cmath>
 
 #include <SDL.h>
 
@@ -52,10 +53,10 @@ void SpeedController::setGameSpeed(float fps)
 {
 	if (fps < 5)
 		fps = 5;
+	if (std::abs(mGameFPS - fps) < 0.01f)
+		return;
 	mGameFPS = fps;
-	
-	/// \todo maybe we should reset only if speed changed?
-	mBeginSecond = mOldTicks;
+	mBeginSecond = SDL_GetTicks();
 	mCounter = 0;
 }
 

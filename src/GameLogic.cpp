@@ -64,9 +64,8 @@ IGameLogic::IGameLogic( int stw )
 , mWinningPlayer(NO_PLAYER)
 , mClock(new Clock())
 {
-	// init clock
+	// init clock (stays stopped until the first serve hit!)
 	mClock->reset();
-	mClock->start();
 	mScores[LEFT_PLAYER] = 0;
 	mScores[RIGHT_PLAYER] = 0;
 	mTouches[LEFT_PLAYER] = 0;
@@ -114,6 +113,11 @@ PlayerSide IGameLogic::getWinningPlayer() const
 }
 
 Clock& IGameLogic::getClock()
+{
+	return *mClock;
+}
+
+const Clock& IGameLogic::getClock() const
 {
 	return *mClock;
 }
@@ -168,28 +172,25 @@ void IGameLogic::step( const DuelMatchState& state )
 {
 	mClock->step();
 
-	if(mClock->isRunning())
-	{
-		--mSquish[0];
-		--mSquish[1];
-		--mSquishWall;
-		--mSquishGround;
+	--mSquish[0];
+	--mSquish[1];
+	--mSquishWall;
+	--mSquishGround;
 
-		OnGameHandler( state );
-	}
+	OnGameHandler( state );
 }
 
 void IGameLogic::onPause()
 {
-	/// pausing for now only means stopping the clock
-	// pausing is saved into an atomic variable, so this is safe
-	/// TODO this comment seems outdated, figure out what is supposed to happen here
 	mClock->stop();
 }
 
 void IGameLogic::onUnPause()
 {
-	mClock->start();
+	if (mIsGameRunning && mWinningPlayer == NO_PLAYER)
+	{
+		mClock->start();
+	}
 }
 
 PlayerInput IGameLogic::transformInput(PlayerInput ip, PlayerSide player)
@@ -255,11 +256,19 @@ void IGameLogic::onBallHitsPlayer(PlayerSide side)
 	// now, the other blobby has to accept the new hit!
 	mSquish[side2index(other_side(side))] = 0;
 
-	// set the ball activity
+	// set the ball activity and start the real-time survival clock on first serve hit
+	if (!mIsGameRunning && mWinningPlayer == NO_PLAYER)
+	{
+		mClock->start();
+	}
 	mIsGameRunning = true;
 
-	// count the touches
+	// count the touches (unbeatable right bot never commits a 4-touch foul)
 	mTouches[side2index(side)]++;
+	if (side == RIGHT_PLAYER && mTouches[side2index(RIGHT_PLAYER)] > 3)
+	{
+		mTouches[side2index(RIGHT_PLAYER)] = 3;
+	}
 	OnBallHitsPlayerHandler(side);
 
 	// reset other players touches after OnBallHitsPlayerHandler is called, so
@@ -301,6 +310,12 @@ void IGameLogic::score(PlayerSide side, int amount)
 
 void IGameLogic::onError(PlayerSide errorSide, PlayerSide serveSide)
 {
+	// In Time-Survival mode, the right bot cannot fail; if left player errs (ground or >3 touches), instant Game Over!
+	if (errorSide == RIGHT_PLAYER)
+	{
+		return;
+	}
+
 	mLastError = errorSide;
 	mIsBallValid = false;
 
@@ -312,6 +327,12 @@ void IGameLogic::onError(PlayerSide errorSide, PlayerSide serveSide)
 	mSquishGround = 0;
 
 	mServingPlayer = serveSide;
+
+	if (errorSide == LEFT_PLAYER)
+	{
+		mClock->stop();
+		mWinningPlayer = RIGHT_PLAYER;
+	}
 }
 
 

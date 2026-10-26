@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* includes */
 #include <sstream>
+#include <cstdio>
+#include <algorithm>
 
 /* implementation */
 
@@ -39,6 +41,7 @@ void Clock::reset()
 	mRunning = false;
 	mGameRunning = duration_t(0);
 	mLastTime = clock_t::now();
+	mCurrentTimeString = "00:00.00";
 }
 
 void Clock::start()
@@ -62,41 +65,31 @@ Clock::seconds Clock::getTime() const
 	return to_seconds(mGameRunning);
 }
 
+int Clock::getTimeMs() const
+{
+	return static_cast<int>(std::chrono::duration_cast<Clock::milliseconds>(mGameRunning).count());
+}
+
 void Clock::setTime(milliseconds newTime)
 {
 	updateGameTime(newTime);
 }
 
+std::string Clock::formatTimeMs(int time_ms)
+{
+	int clamped_ms = std::max(0, time_ms);
+	int centiseconds = (clamped_ms / 10) % 100;
+	int seconds = (clamped_ms / 1000) % 60;
+	int minutes = (clamped_ms / 60000);
+
+	char buffer[32];
+	std::snprintf(buffer, sizeof(buffer), "%02d:%02d.%02d", minutes, seconds, centiseconds);
+	return std::string(buffer);
+}
+
 std::string Clock::makeTimeString(seconds time)
 {
-	int time_sec = time.count();
-	int seconds = time_sec % 60;
-	int minutes = ((time_sec - seconds) / 60) % 60;
-	int hours = ((time_sec - 60 * minutes - seconds) / 3600) % 60;
-
-	// now convert to string via stringstream
-	std::stringstream stream;
-
-	// only write hours if already player more than 1h
-	if(hours > 0)
-		stream << hours << ":";
-
-	// write minutes
-	// leading 0 if minutes < 10
-	if(minutes < 10)
-		stream << "0";
-
-	stream << minutes << ":";
-
-	// write seconds
-	// leading 0 if seconds < 10
-	if(seconds < 10)
-		stream << "0";
-
-	stream << seconds;
-
-	// convert stringstream to string and return
-	return stream.str();
+	return formatTimeMs(static_cast<int>(time.count()) * 1000);
 }
 
 const std::string& Clock::getTimeString() const
@@ -115,12 +108,6 @@ void Clock::step()
 }
 
 void Clock::updateGameTime(duration_t new_time) {
-	auto old_sec = to_seconds( mGameRunning );
-	auto new_sec = to_seconds( new_time);
 	mGameRunning = new_time;
-
-	// update time string only when the seconds change.
-	if(old_sec != new_sec) {
-		mCurrentTimeString = makeTimeString(new_sec);
-	}
+	mCurrentTimeString = formatTimeMs(getTimeMs());
 }

@@ -44,6 +44,12 @@ class LocalGameState : public GameState
 		std::shared_ptr<InputSource> createInputSource( IUserConfigReader& config, PlayerSide side, const DuelMatch* match );
 
 		bool mWinner;
+		float mBaseGameFPS{75.f};
+		int mLastDifficultyLevel{0};
+		int mHighscoreMs{0};
+		int mFinalTimeMs{0};
+		bool mIsNewHighscore{false};
+		unsigned int mGameOverTicks{0};
 
 		std::unique_ptr<ReplayRecorder> mRecorder;
 };
