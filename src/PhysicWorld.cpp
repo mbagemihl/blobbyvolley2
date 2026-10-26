@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* implementation */
 // Gamefeeling relevant constants:
-const float BLOBBY_ANIMATION_SPEED = 0.5;
+const float BLOBBY_ANIMATION_SPEED = 0.35f;
 
 // helper function for setting FPU precision
 inline short set_fpu_single_precision();
@@ -205,6 +205,8 @@ bool PhysicWorld::handleBlobbyBallCollision(PlayerSide player)
 	mBallVelocity = mBallVelocity.normalise();
 	mBallVelocity = mBallVelocity.scale(BALL_COLLISION_VELOCITY);
 	mBallPosition += mBallVelocity;
+
+	blobbyStartAnimation(player);
 
 	mCallback( MatchEvent{MatchEvent::BALL_HIT_BLOB, player, intensity} );
 

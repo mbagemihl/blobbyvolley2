@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Vector.h"
 #include "Color.h"
 #include "BlobbyDebug.h"
+#include "Global.h"
 
 
 class BloodManager;
@@ -173,14 +174,39 @@ class RenderManager : public ObjectCounter<RenderManager>
 		Vector2 ballShadowPosition(const Vector2& position);
 
 		SDL_Rect blobRect(const Vector2& position);
+		SDL_Rect blobWobbleRect(const Vector2& position, float scaleX, float scaleY);
 		SDL_Rect blobShadowRect(const Vector2& position);
 		SDL_Rect ballRect(const Vector2& position);
 		SDL_Rect ballShadowRect(const Vector2& position);
+
+		struct BlobVisualState
+		{
+			float scaleX = 1.0f;
+			float scaleY = 1.0f;
+			float tiltDeg = 0.0f;
+			int frameA = 0;
+			int frameB = 0;
+			float frameBlend = 0.0f;
+
+			float stretch = 0.0f;
+			float stretchVel = 0.0f;
+			float smoothTilt = 0.0f;
+			float smoothAnim = 0.0f;
+			float prevVelY = 0.0f;
+			float prevVelX = 0.0f;
+			Vector2 prevBallVel = Vector2(0.f, 0.f);
+			bool wasOnGround = true;
+			bool initialized = false;
+			Uint32 lastTicks = 0;
+		};
+
+		const BlobVisualState& updateBlobVisualState(PlayerSide player, const DuelMatchState& gameState);
 
 		std::map<std::string, BufferedImage*> mImageMap;
 
 		float mMouseMarkerPosition;
 
 	private:
+		BlobVisualState mBlobVisual[MAX_PLAYERS];
 		std::unique_ptr<BloodManager> mBloodMgr;
 };

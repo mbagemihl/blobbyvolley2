@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
 Blobby Volley 2
 Copyright (C) 2006 Jonathan Sieber (jonathan_sieber@yahoo.de)
 Copyright (C) 2006 Daniel Knobe (daniel-knobe@web.de)
@@ -22,9 +22,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "RenderManager.h"
 
 /* includes */
+#include <algorithm>
+#include <cmath>
+
 #include "FileRead.h"
 #include "Blood.h"
 #include "IUserConfigReader.h"
+#include "DuelMatchState.h"
+#include "GameConstants.h"
 
 /* implementation */
 #define INVALID_FONT_INDEX -1
@@ -277,6 +282,125 @@ SDL_Rect RenderManager::blobRect(const Vector2& position)
 	};
 
 	return rect;
+}
+
+SDL_Rect RenderManager::blobWobbleRect(const Vector2& position, float scaleX, float scaleY)
+{
+	const int w = std::max(1, (int)lround(75.0f * scaleX));
+	const int h = std::max(1, (int)lround(89.0f * scaleY));
+	// Anchor at the bottom of the blob (position.y + 45) so feet stay planted on the ground during squash & stretch
+	SDL_Rect rect = {
+		(short)lround(position.x - w * 0.5f),
+		(short)lround(position.y + 45.0f - h),
+		w,
+		h
+	};
+	return rect;
+}
+
+const RenderManager::BlobVisualState& RenderManager::updateBlobVisualState(PlayerSide player, const DuelMatchState& gameState)
+{
+	BlobVisualState& s = mBlobVisual[player];
+	Uint32 now = SDL_GetTicks();
+	float dt = s.initialized ? std::min(0.05f, std::max(0.001f, (now - s.lastTicks) * 0.001f)) : (1.0f / 75.0f);
+	s.lastTicks = now;
+
+	const Vector2 pos = gameState.getBlobPosition(player);
+	const Vector2 vel = gameState.getBlobVelocity(player);
+	const float rawState = gameState.getBlobState(player);
+	const Vector2 ballPos = gameState.getBallPosition();
+	const Vector2 ballVel = gameState.getBallVelocity();
+	const bool onGround = (pos.y >= GROUND_PLANE_HEIGHT - 1.0f);
+
+	if (!s.initialized)
+	{
+		s.initialized = true;
+		s.wasOnGround = onGround;
+		s.prevVelY = vel.y;
+		s.prevVelX = vel.x;
+		s.prevBallVel = ballVel;
+		s.smoothAnim = rawState;
+	}
+
+	// 1. Jump launch impulse (stretch vertically)
+	if (s.wasOnGround && !onGround && vel.y < -5.0f)
+	{
+		s.stretch += 0.16f;
+		s.stretchVel += 2.4f;
+	}
+
+	// 2. Landing on sand impulse (squash downward & bounce into jelly wobble)
+	if (!s.wasOnGround && onGround && s.prevVelY > 2.0f)
+	{
+		float impact = std::min(1.2f, s.prevVelY / 13.0f);
+		s.stretch -= 0.22f * impact;
+		s.stretchVel -= 3.6f * impact;
+	}
+
+	// 3. Sudden horizontal start/stop/turn impulse on ground
+	if (onGround && std::fabs(vel.x - s.prevVelX) > 3.0f)
+	{
+		s.stretchVel += 1.25f;
+	}
+
+	// 4. Ball collision jelly impulse
+	float distToBall = (ballPos - pos).length();
+	if (distToBall < 92.0f && (ballVel - s.prevBallVel).length() > 4.0f)
+	{
+		s.stretch -= 0.16f;
+		s.stretchVel -= 3.0f;
+	}
+
+	// 5. Continuous target stretch (airborne velocity + walking wobble + soft idle breathing)
+	float timeSec = now * 0.001f;
+	float phaseOffset = (player == RIGHT_PLAYER) ? 1.7f : 0.0f;
+	float targetStretch = 0.0f;
+	if (!onGround)
+	{
+		// Stretch when rising/falling fast, slightly squash at jump apex
+		targetStretch = std::min(0.14f, std::max(-0.10f, std::fabs(vel.y) * 0.010f - 0.04f));
+	}
+	else if (std::fabs(vel.x) > 0.1f)
+	{
+		targetStretch = std::sin(timeSec * 20.0f + phaseOffset) * 0.065f;
+	}
+	else
+	{
+		targetStretch = std::sin(timeSec * 4.5f + phaseOffset) * 0.022f;
+	}
+
+	// 6. Underdamped spring-damper oscillator for wobbly pudding physics
+	const float stiffness = 185.0f;
+	const float damping = 8.8f;
+	float accel = -stiffness * (s.stretch - targetStretch) - damping * s.stretchVel;
+	s.stretchVel += accel * dt;
+	s.stretch += s.stretchVel * dt;
+	s.stretch = std::min(0.32f, std::max(-0.30f, s.stretch));
+
+	// Volume-preserving squash and stretch
+	s.scaleY = 1.0f + s.stretch;
+	s.scaleX = 1.0f - 0.78f * s.stretch;
+
+	// 7. Smooth velocity lean / wobble tilt
+	float targetTilt = std::min(7.5f, std::max(-7.5f, vel.x * 1.15f))
+	                 + s.stretch * ((vel.x >= 0.0f) ? 5.5f : -5.5f);
+	s.smoothTilt += (targetTilt - s.smoothTilt) * std::min(1.0f, dt * 14.0f);
+	s.tiltDeg = s.smoothTilt;
+
+	// 8. Smooth sub-frame animation state for cross-blending between discrete blob frames
+	float targetAnim = std::min(4.99f, std::max(0.0f, rawState + std::fabs(s.stretch) * 6.0f));
+	s.smoothAnim += (targetAnim - s.smoothAnim) * std::min(1.0f, dt * 16.0f);
+	float clampedAnim = std::min(4.99f, std::max(0.0f, s.smoothAnim));
+	s.frameA = std::min(4, std::max(0, (int)std::floor(clampedAnim)));
+	s.frameB = std::min(4, s.frameA + 1);
+	s.frameBlend = clampedAnim - std::floor(clampedAnim);
+
+	s.wasOnGround = onGround;
+	s.prevVelY = vel.y;
+	s.prevVelX = vel.x;
+	s.prevBallVel = ballVel;
+
+	return s;
 }
 
 SDL_Rect RenderManager::ballRect(const Vector2& position)

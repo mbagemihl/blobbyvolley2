@@ -629,27 +629,34 @@ void RenderManagerGL2D::drawGame(const DuelMatchState& gameState)
 	glDisable(GL_BLEND);
 */
 
+	const auto& leftVis = updateBlobVisualState(LEFT_PLAYER, gameState);
+	const auto& rightVis = updateBlobVisualState(RIGHT_PLAYER, gameState);
+
 	// blob normal
 	// left blob
-	glBindTexture(mBlob[int(gameState.getBlobState(LEFT_PLAYER))  % 5]);
+	Vector2 leftPos = gameState.getBlobPosition(LEFT_PLAYER);
+	float leftDrawY = leftPos.y + 45.0f * (1.0f - leftVis.scaleY);
+	glBindTexture(mBlob[leftVis.frameA]);
 	glColor3ub(mLeftBlobColor.r, mLeftBlobColor.g, mLeftBlobColor.b);
-	drawQuad(gameState.getBlobPosition(LEFT_PLAYER).x,gameState.getBlobPosition(LEFT_PLAYER).y, 128.0, 128.0);
+	drawQuad(leftPos.x, leftDrawY, 128.0f * leftVis.scaleX, 128.0f * leftVis.scaleY);
 
 	// right blob
-	glBindTexture(mBlob[int(gameState.getBlobState(RIGHT_PLAYER))  % 5]);
+	Vector2 rightPos = gameState.getBlobPosition(RIGHT_PLAYER);
+	float rightDrawY = rightPos.y + 45.0f * (1.0f - rightVis.scaleY);
+	glBindTexture(mBlob[rightVis.frameA]);
 	glColor3ub(mRightBlobColor.r, mRightBlobColor.g, mRightBlobColor.b);
-	drawQuad(gameState.getBlobPosition(RIGHT_PLAYER).x, gameState.getBlobPosition(RIGHT_PLAYER).y, 128.0, 128.0);
+	drawQuad(rightPos.x, rightDrawY, 128.0f * rightVis.scaleX, 128.0f * rightVis.scaleY);
 
 	// blob specular
 	glEnable(GL_BLEND);
 	glColor4f(1.0, 1.0, 1.0, 1.0);
 	// left blob
-	glBindTexture(mBlobSpecular[int(gameState.getBlobState(LEFT_PLAYER))  % 5]);
-	drawQuad(gameState.getBlobPosition(LEFT_PLAYER).x,gameState.getBlobPosition(LEFT_PLAYER).y, 128.0, 128.0);
+	glBindTexture(mBlobSpecular[leftVis.frameA]);
+	drawQuad(leftPos.x, leftDrawY, 128.0f * leftVis.scaleX, 128.0f * leftVis.scaleY);
 
 	// right blob
-	glBindTexture(mBlobSpecular[int(gameState.getBlobState(RIGHT_PLAYER))  % 5]);
-	drawQuad(gameState.getBlobPosition(RIGHT_PLAYER).x, gameState.getBlobPosition(RIGHT_PLAYER).y, 128.0, 128.0);
+	glBindTexture(mBlobSpecular[rightVis.frameA]);
+	drawQuad(rightPos.x, rightDrawY, 128.0f * rightVis.scaleX, 128.0f * rightVis.scaleY);
 
 	glDisable(GL_BLEND);
 

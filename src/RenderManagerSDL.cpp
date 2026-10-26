@@ -651,6 +651,9 @@ void RenderManagerSDL::drawGame(const DuelMatchState& gameState)
 	position.h = 5;
 	SDL_RenderCopy(mRenderer, mMarker[(int)SDL_GetTicks() % 1000 >= 500], nullptr, &position);
 
+	const auto& leftVis = updateBlobVisualState(LEFT_PLAYER, gameState);
+	const auto& rightVis = updateBlobVisualState(RIGHT_PLAYER, gameState);
+
 	if(mShowShadow)
 	{
 		// Ball Shadow
@@ -659,13 +662,13 @@ void RenderManagerSDL::drawGame(const DuelMatchState& gameState)
 
 		// Left blob shadow
 		position = blobShadowRect(blobShadowPosition(gameState.getBlobPosition(LEFT_PLAYER)));
-		int animationState = int(gameState.getBlobState(LEFT_PLAYER)) % 5;
-		SDL_RenderCopy(mRenderer, mLeftBlobShadow[animationState].mSDLsf, nullptr, &position);
+		position.w = (int)lround(position.w * leftVis.scaleX);
+		SDL_RenderCopy(mRenderer, mLeftBlobShadow[leftVis.frameA].mSDLsf, nullptr, &position);
 
 		// Right blob shadow
 		position = blobShadowRect(blobShadowPosition(gameState.getBlobPosition(RIGHT_PLAYER)));
-		animationState = int(gameState.getBlobState(RIGHT_PLAYER)) % 5;
-		SDL_RenderCopy(mRenderer, mRightBlobShadow[animationState].mSDLsf, nullptr, &position);
+		position.w = (int)lround(position.w * rightVis.scaleX);
+		SDL_RenderCopy(mRenderer, mRightBlobShadow[rightVis.frameA].mSDLsf, nullptr, &position);
 	}
 
 	// Restore the rod
@@ -683,17 +686,33 @@ void RenderManagerSDL::drawGame(const DuelMatchState& gameState)
 	int animationState = int(gameState.getBallRotation() / M_PI / 2 * 16) % 16;
 	SDL_RenderCopy(mRenderer, mBall[animationState], nullptr, &position);
 
-	// update blob colors
-	int leftFrame = int(gameState.getBlobState(LEFT_PLAYER)) % 5;
-	int rightFrame = int(gameState.getBlobState(RIGHT_PLAYER)) % 5;
-	colorizeBlobs(LEFT_PLAYER, leftFrame);
-	colorizeBlobs(RIGHT_PLAYER, rightFrame);
+	// update blob colors for both primary and cross-blended frames
+	colorizeBlobs(LEFT_PLAYER, leftVis.frameA);
+	colorizeBlobs(LEFT_PLAYER, leftVis.frameB);
+	colorizeBlobs(RIGHT_PLAYER, rightVis.frameA);
+	colorizeBlobs(RIGHT_PLAYER, rightVis.frameB);
 
-	// Drawing left blob
-	position = blobRect(gameState.getBlobPosition(LEFT_PLAYER));
-	SDL_RenderCopy( mRenderer, mLeftBlob[leftFrame].mSDLsf, nullptr, &position);
+	// Drawing left blob with soft squash/stretch, tilt, and sub-frame cross-blending
+	position = blobWobbleRect(gameState.getBlobPosition(LEFT_PLAYER), leftVis.scaleX, leftVis.scaleY);
+	SDL_Point leftPivot = { position.w / 2, std::max(0, position.h - 6) };
+	SDL_SetTextureAlphaMod(mLeftBlob[leftVis.frameA].mSDLsf, 255);
+	SDL_RenderCopyEx(mRenderer, mLeftBlob[leftVis.frameA].mSDLsf, nullptr, &position, leftVis.tiltDeg, &leftPivot, SDL_FLIP_NONE);
+	if (leftVis.frameB != leftVis.frameA && leftVis.frameBlend > 0.02f)
+	{
+		SDL_SetTextureAlphaMod(mLeftBlob[leftVis.frameB].mSDLsf, (Uint8)lround(leftVis.frameBlend * 255.0f));
+		SDL_RenderCopyEx(mRenderer, mLeftBlob[leftVis.frameB].mSDLsf, nullptr, &position, leftVis.tiltDeg, &leftPivot, SDL_FLIP_NONE);
+		SDL_SetTextureAlphaMod(mLeftBlob[leftVis.frameB].mSDLsf, 255);
+	}
 
-	// Drawing right blob
-	position = blobRect(gameState.getBlobPosition(RIGHT_PLAYER));
-	SDL_RenderCopy(mRenderer, mRightBlob[rightFrame].mSDLsf, nullptr, &position);
+	// Drawing right blob with soft squash/stretch, tilt, and sub-frame cross-blending
+	position = blobWobbleRect(gameState.getBlobPosition(RIGHT_PLAYER), rightVis.scaleX, rightVis.scaleY);
+	SDL_Point rightPivot = { position.w / 2, std::max(0, position.h - 6) };
+	SDL_SetTextureAlphaMod(mRightBlob[rightVis.frameA].mSDLsf, 255);
+	SDL_RenderCopyEx(mRenderer, mRightBlob[rightVis.frameA].mSDLsf, nullptr, &position, rightVis.tiltDeg, &rightPivot, SDL_FLIP_NONE);
+	if (rightVis.frameB != rightVis.frameA && rightVis.frameBlend > 0.02f)
+	{
+		SDL_SetTextureAlphaMod(mRightBlob[rightVis.frameB].mSDLsf, (Uint8)lround(rightVis.frameBlend * 255.0f));
+		SDL_RenderCopyEx(mRenderer, mRightBlob[rightVis.frameB].mSDLsf, nullptr, &position, rightVis.tiltDeg, &rightPivot, SDL_FLIP_NONE);
+		SDL_SetTextureAlphaMod(mRightBlob[rightVis.frameB].mSDLsf, 255);
+	}
 }
