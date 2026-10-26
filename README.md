@@ -1,7 +1,10 @@
-# Blobby Volley 2 ![build workflow](https://github.com/danielknobe/blobbyvolley2/actions/workflows/main.yaml/badge.svg)
+#This is a Single Player Fork of Blobby Volley 2 ![build workflow](https://github.com/danielknobe/blobbyvolley2/actions/workflows/main.yaml/badge.svg)
 **The head-to-head multiplayer ball game**
 
-### Website
+# Game Mode
+You are playing against an unbeatable AI and try to survive as long as possible.
+
+### Official Website
  http://blobbyvolley.de
 
 ### System requirements
